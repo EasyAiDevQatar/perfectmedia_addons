@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 from frappe.desk.reportview import build_match_conditions
-from frappe.utils import getdate
+from frappe.utils import flt, getdate
 from pypika import Order
 
 
@@ -28,9 +28,58 @@ def execute(filters=None):
 	columns = get_columns()
 
 	if not rows:
-		return columns, []
+		return columns, [], None, None, []
 
-	return columns, rows
+	report_summary = build_report_summary(rows, filters.company)
+	return columns, rows, None, None, report_summary
+
+
+def build_report_summary(rows, company):
+	"""KPI cards shown above the datatable (colors via indicator)."""
+	seen_invoices = set()
+	total_invoiced = total_paid = total_outstanding = 0.0
+
+	for r in rows:
+		inv = r.get("invoice_reference")
+		if not inv or inv in seen_invoices:
+			continue
+		seen_invoices.add(inv)
+		total_invoiced += flt(r.get("grand_total"))
+		total_paid += flt(r.get("paid_amount"))
+		total_outstanding += flt(r.get("outstanding_amount"))
+
+	currency = rows[0].get("currency") or frappe.get_cached_value(
+		"Company", company, "default_currency"
+	)
+	inv_count = len(seen_invoices)
+	line_count = len(rows)
+
+	return [
+		{"label": _("Invoices"), "value": inv_count, "datatype": "Int", "indicator": "Blue"},
+		{
+			"label": _("Total Invoiced"),
+			"value": total_invoiced,
+			"datatype": "Currency",
+			"currency": currency,
+			"indicator": "Green",
+		},
+		{
+			"label": _("Total Paid"),
+			"value": total_paid,
+			"datatype": "Currency",
+			"currency": currency,
+			"indicator": "Green",
+		},
+		{
+			"label": _("Outstanding"),
+			"value": total_outstanding,
+			"datatype": "Currency",
+			"currency": currency,
+			"indicator": "Orange" if total_outstanding > 0 else "Green",
+		},
+		{"type": "separator", "value": ""},
+		{"label": _("Line Items"), "value": line_count, "datatype": "Int", "indicator": "Gray"},
+	]
 
 
 def get_columns():
