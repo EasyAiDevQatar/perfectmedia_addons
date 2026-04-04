@@ -135,6 +135,27 @@ def get_columns():
 	]
 
 
+def invoice_paid_amount(row):
+	"""Settled amount against the invoice.
+
+	`tabSales Invoice`.`paid_amount` is only filled for POS / loyalty redemption from the
+	payments child table. Invoices paid via Payment Entry keep `paid_amount` at 0 while
+	`outstanding_amount` is updated — same relationship as
+	`calculate_outstanding_amount` in taxes_and_totals.
+	"""
+	party = row.get("party_account_currency") or row.get("currency")
+	inv = row.get("currency")
+	if party == inv:
+		total_to_pay = flt(row.get("rounded_total") or row.get("grand_total"))
+		total_to_pay -= flt(row.get("total_advance"))
+		total_to_pay -= flt(row.get("write_off_amount"))
+	else:
+		total_to_pay = flt(row.get("base_rounded_total") or row.get("base_grand_total"))
+		total_to_pay -= flt(row.get("total_advance"))
+		total_to_pay -= flt(row.get("base_write_off_amount"))
+	return flt(total_to_pay) - flt(row.get("outstanding_amount"))
+
+
 def get_rows(filters, from_date, to_date):
 	si = frappe.qb.DocType("Sales Invoice")
 	sii = frappe.qb.DocType("Sales Invoice Item")
@@ -147,8 +168,14 @@ def get_rows(filters, from_date, to_date):
 			si.posting_date,
 			si.name.as_("invoice_reference"),
 			si.grand_total,
-			si.paid_amount,
+			si.rounded_total,
+			si.total_advance,
+			si.write_off_amount,
 			si.outstanding_amount,
+			si.base_grand_total,
+			si.base_rounded_total,
+			si.base_write_off_amount,
+			si.party_account_currency,
 			si.due_date,
 			si.currency,
 			sii.item_code,
@@ -174,4 +201,18 @@ def get_rows(filters, from_date, to_date):
 	if match_conditions:
 		query += " and " + match_conditions
 
-	return frappe.db.sql(query, params, as_dict=True)
+	rows = frappe.db.sql(query, params, as_dict=True)
+	_internal = (
+		"rounded_total",
+		"total_advance",
+		"write_off_amount",
+		"base_grand_total",
+		"base_rounded_total",
+		"base_write_off_amount",
+		"party_account_currency",
+	)
+	for row in rows:
+		row["paid_amount"] = invoice_paid_amount(row)
+		for k in _internal:
+			row.pop(k, None)
+	return rows
