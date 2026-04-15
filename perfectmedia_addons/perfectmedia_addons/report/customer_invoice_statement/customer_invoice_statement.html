@@ -1,0 +1,25 @@
+{% if report && report.raw_data && report.raw_data.report_summary %}
+<div class="report-summary-print" style="margin-bottom: 1em">
+	<table class="table table-condensed table-bordered" style="width: 100%">
+		<tbody>
+			<tr>
+				{% for s in report.raw_data.report_summary %}
+					{% if s.type != "separator" %}
+						<td style="padding: 8px 12px; white-space: nowrap">
+							<strong>{{ __(s.label) }}:</strong>
+							{% if s.datatype == "Currency" %}
+								{{ format_currency(flt(s.value), s.currency || (data[0] && data[0].currency)) }}
+							{% else %}
+								{{ s.value }}
+							{% endif %}
+						</td>
+					{% endif %}
+				{% endfor %}
+			</tr>
+		</tbody>
+	</table>
+</div>
+<hr>
+{% endif %}
+
+{% include 'public/js/frappe/views/reports/print_grid.html' %}

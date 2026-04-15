@@ -30,6 +30,7 @@ def execute(filters=None):
 	if not rows:
 		return columns, [], None, None, []
 
+	rows = append_invoice_subtotal_rows(rows)
 	report_summary = build_report_summary(rows, filters.company)
 	return columns, rows, None, None, report_summary
 
@@ -40,6 +41,8 @@ def build_report_summary(rows, company):
 	total_invoiced = total_paid = total_outstanding = 0.0
 
 	for r in rows:
+		if r.get("is_invoice_subtotal"):
+			continue
 		inv = r.get("invoice_reference")
 		if not inv or inv in seen_invoices:
 			continue
@@ -52,7 +55,7 @@ def build_report_summary(rows, company):
 		"Company", company, "default_currency"
 	)
 	inv_count = len(seen_invoices)
-	line_count = len(rows)
+	line_count = sum(1 for r in rows if not r.get("is_invoice_subtotal"))
 
 	return [
 		{"label": _("Invoices"), "value": inv_count, "datatype": "Int", "indicator": "Blue"},
@@ -133,6 +136,53 @@ def get_columns():
 			"width": 120,
 		},
 	]
+
+
+def append_invoice_subtotal_rows(rows):
+	"""After each invoice's item lines, insert a subtotal row (sum of net_amount)."""
+	if not rows:
+		return rows
+
+	out = []
+	current_inv = None
+	group_sum = 0.0
+	last_line = None
+
+	for row in rows:
+		inv = row.get("invoice_reference")
+		if inv != current_inv:
+			if current_inv is not None and last_line is not None:
+				out.append(_invoice_subtotal_row(last_line, group_sum))
+			current_inv = inv
+			group_sum = 0.0
+		group_sum += flt(row.get("net_amount"))
+		last_line = row
+		out.append(row)
+
+	if current_inv is not None and last_line is not None:
+		out.append(_invoice_subtotal_row(last_line, group_sum))
+
+	return out
+
+
+def _invoice_subtotal_row(from_row, line_total):
+	return {
+		"posting_date": None,
+		"invoice_reference": from_row.get("invoice_reference"),
+		"grand_total": None,
+		"paid_amount": None,
+		"outstanding_amount": None,
+		"due_date": None,
+		"item_code": None,
+		"item_name": _("Invoice lines total ({0})").format(from_row.get("invoice_reference") or ""),
+		"qty": None,
+		"uom": None,
+		"net_rate": None,
+		"net_amount": flt(line_total),
+		"currency": from_row.get("currency"),
+		"is_invoice_subtotal": 1,
+		"bold": 1,
+	}
 
 
 def invoice_paid_amount(row):

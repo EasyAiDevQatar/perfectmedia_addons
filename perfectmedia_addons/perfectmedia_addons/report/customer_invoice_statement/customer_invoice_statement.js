@@ -54,6 +54,9 @@ frappe.query_reports["Customer Invoice Statement"] = {
 
 		const itemTotals = {};
 		for (const row of result) {
+			if (cint(row.is_invoice_subtotal)) {
+				continue;
+			}
 			const key = row.item_name || row.item_code || __("Unknown");
 			const amt = flt(row.net_amount);
 			itemTotals[key] = (itemTotals[key] || 0) + amt;
@@ -98,7 +101,13 @@ frappe.query_reports["Customer Invoice Statement"] = {
 
 	formatter: function (value, row, column, data, default_formatter) {
 		const formatted = default_formatter(value, row, column, data);
-		if (!data || value === undefined || value === null) {
+		if (!data) {
+			return formatted;
+		}
+		if (cint(data.is_invoice_subtotal)) {
+			return `<span style="font-weight:700">${formatted}</span>`;
+		}
+		if (value === undefined || value === null) {
 			return formatted;
 		}
 
@@ -126,3 +135,115 @@ frappe.query_reports["Customer Invoice Statement"] = {
 		return formatted;
 	},
 };
+
+// Print/PDF: dialog without Print Format field (bundled customer_invoice_statement.html only).
+(function () {
+	if (frappe.__pm_customer_invoice_statement_print) {
+		return;
+	}
+	frappe.__pm_customer_invoice_statement_print = true;
+
+	const REPORT_NAME = "Customer Invoice Statement";
+	const origGetPrintSettings = frappe.ui.get_print_settings;
+
+	frappe.ui.get_print_settings = function (pdf, callback, letter_head, pick_columns, has_filters) {
+		if (frappe.query_report && frappe.query_report.report_name === REPORT_NAME) {
+			return openPrintSettingsWithoutPrintFormat(pdf, callback, letter_head, pick_columns, has_filters);
+		}
+		return origGetPrintSettings.call(this, pdf, callback, letter_head, pick_columns, has_filters);
+	};
+
+	function openPrintSettingsWithoutPrintFormat(pdf, callback, letter_head, pick_columns, has_filters) {
+		const print_settings =
+			(locals[":Print Settings"] && locals[":Print Settings"]["Print Settings"]) || {};
+		const company = frappe.defaults.get_default("company");
+		let default_letter_head = "";
+		if (locals[":Company"] && locals[":Company"][company]) {
+			default_letter_head = locals[":Company"][company]["default_letter_head"] || "";
+		}
+
+		const columns = [
+			{
+				fieldtype: "Select",
+				fieldname: "orientation",
+				label: __("Orientation"),
+				options: [
+					{ value: "Landscape", label: __("Landscape") },
+					{ value: "Portrait", label: __("Portrait") },
+				],
+				default: "Landscape",
+			},
+			{
+				fieldtype: "Check",
+				fieldname: "with_letter_head",
+				label: __("With Letter head"),
+			},
+			{
+				fieldtype: "Link",
+				fieldname: "letter_head",
+				label: __("Letter Head"),
+				depends_on: "with_letter_head",
+				options: "Letter Head",
+				default: letter_head || default_letter_head,
+			},
+		];
+
+		if (has_filters) {
+			columns.push({
+				label: __("Include filters"),
+				fieldtype: "Check",
+				fieldname: "include_filters",
+			});
+		}
+
+		if (pick_columns) {
+			columns.push(
+				{
+					label: __("Pick Columns"),
+					fieldtype: "Check",
+					fieldname: "pick_columns",
+				},
+				{
+					label: __("Select Columns"),
+					fieldtype: "MultiCheck",
+					fieldname: "columns",
+					depends_on: "pick_columns",
+					columns: 2,
+					select_all: true,
+					options: pick_columns.map((df) => ({
+						label: __(df.label, null, df.parent),
+						value: df.fieldname,
+					})),
+				}
+			);
+		}
+
+		return frappe.prompt(
+			columns,
+			function (dialog_values) {
+				// Fresh merge — do not mutate global Print Settings doc (avoids stale keys).
+				let settings = $.extend({}, print_settings, dialog_values);
+				settings.print_format = null;
+
+				if (!settings.with_letter_head) {
+					settings.letter_head = null;
+				}
+
+				if (settings.letter_head) {
+					const lh_key = settings.letter_head;
+					settings.letter_head = frappe.boot.letter_heads[lh_key];
+				}
+
+				// query_report uses: (print_settings.columns || !custom_format) ? "print_grid" : custom_format
+				// Empty array [] is truthy in JS and forces print_grid — breaks bundled HTML template.
+				if (!cint(settings.pick_columns)) {
+					settings.pick_columns = 0;
+					delete settings.columns;
+				}
+
+				callback(settings);
+			},
+			__("Print Settings")
+		);
+	}
+})();
