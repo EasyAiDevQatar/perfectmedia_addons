@@ -94,7 +94,7 @@ frappe.query_reports["Customer Invoice Statement"] = {
 			colors: CIS_COLORS,
 			// Plain text only: frappe.format(Currency) returns HTML <div>, which the chart legend shows as raw markup.
 			tooltipOptions: {
-				formatTooltipY: (d) => format_currency(flt(d), currency),
+				formatTooltipY: (d) => format_currency(flt(d), currency, 2),
 			},
 		};
 	},

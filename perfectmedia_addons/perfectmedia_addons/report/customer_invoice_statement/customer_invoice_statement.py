@@ -64,6 +64,7 @@ def build_report_summary(rows, company):
 			"value": total_invoiced,
 			"datatype": "Currency",
 			"currency": currency,
+			"precision": 2,
 			"indicator": "Green",
 		},
 		{
@@ -71,6 +72,7 @@ def build_report_summary(rows, company):
 			"value": total_paid,
 			"datatype": "Currency",
 			"currency": currency,
+			"precision": 2,
 			"indicator": "Green",
 		},
 		{
@@ -78,6 +80,7 @@ def build_report_summary(rows, company):
 			"value": total_outstanding,
 			"datatype": "Currency",
 			"currency": currency,
+			"precision": 2,
 			"indicator": "Orange" if total_outstanding > 0 else "Green",
 		},
 		{"type": "separator", "value": ""},
@@ -100,6 +103,7 @@ def get_columns():
 			"fieldname": "grand_total",
 			"fieldtype": "Currency",
 			"options": "currency",
+			"precision": 2,
 			"width": 120,
 		},
 		{
@@ -107,6 +111,7 @@ def get_columns():
 			"fieldname": "paid_amount",
 			"fieldtype": "Currency",
 			"options": "currency",
+			"precision": 2,
 			"width": 120,
 		},
 		{
@@ -114,18 +119,20 @@ def get_columns():
 			"fieldname": "outstanding_amount",
 			"fieldtype": "Currency",
 			"options": "currency",
+			"precision": 2,
 			"width": 120,
 		},
 		{"label": _("Due Date"), "fieldname": "due_date", "fieldtype": "Date", "width": 110},
 		{"label": _("Item Code"), "fieldname": "item_code", "fieldtype": "Link", "options": "Item", "width": 120},
 		{"label": _("Item Name"), "fieldname": "item_name", "fieldtype": "Data", "width": 220},
-		{"label": _("Qty"), "fieldname": "qty", "fieldtype": "Float", "width": 80},
+		{"label": _("Qty"), "fieldname": "qty", "fieldtype": "Float", "precision": 2, "width": 80},
 		{"label": _("UOM"), "fieldname": "uom", "fieldtype": "Data", "width": 70},
 		{
 			"label": _("Rate"),
 			"fieldname": "net_rate",
 			"fieldtype": "Currency",
 			"options": "currency",
+			"precision": 2,
 			"width": 100,
 		},
 		{
@@ -133,6 +140,7 @@ def get_columns():
 			"fieldname": "net_amount",
 			"fieldtype": "Currency",
 			"options": "currency",
+			"precision": 2,
 			"width": 120,
 		},
 	]
