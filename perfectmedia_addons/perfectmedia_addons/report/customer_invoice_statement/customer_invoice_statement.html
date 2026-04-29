@@ -1,7 +1,26 @@
-<div class="pm-statement-logo" style="margin-bottom: 12px; text-align: left">
-	<img src="/files/Perfect%20Media%20logo.png" alt="Perfect Media" style="max-height: 90px; width: auto">
+<style>
+	.pm-statement-logo {
+		left: 0;
+		position: fixed;
+		top: 0;
+		z-index: 10;
+	}
+
+	.pm-statement-logo img {
+		max-height: 70px;
+		width: auto;
+	}
+
+	.pm-statement-print-content {
+		padding-top: 82px;
+	}
+</style>
+
+<div class="pm-statement-logo">
+	<img src="/files/Perfect%20Media%20logo.png" alt="Perfect Media">
 </div>
 
+<div class="pm-statement-print-content">
 {% if report && report.raw_data && report.raw_data.report_summary %}
 <div class="report-summary-print" style="margin-bottom: 1em">
 	<table class="table table-condensed table-bordered" style="width: 100%">
@@ -27,3 +46,4 @@
 {% endif %}
 
 {% include 'public/js/frappe/views/reports/print_grid.html' %}
+</div>
