@@ -89,6 +89,7 @@ def build_report_summary(rows, company):
 def get_columns():
 	return [
 		{"label": _("Invoice Date"), "fieldname": "posting_date", "fieldtype": "Date", "width": 110},
+		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data", "width": 200},
 		{
 			"label": _("Invoice Reference No"),
 			"fieldname": "invoice_reference",
@@ -174,6 +175,7 @@ def append_invoice_subtotal_rows(rows):
 def _invoice_subtotal_row(from_row, line_total):
 	return {
 		"posting_date": None,
+		"customer_name": None,
 		"invoice_reference": from_row.get("invoice_reference"),
 		"grand_total": None,
 		"paid_amount": None,
@@ -222,6 +224,7 @@ def get_rows(filters, from_date, to_date):
 		.on(si.name == sii.parent)
 		.select(
 			si.posting_date,
+			si.customer_name,
 			si.name.as_("invoice_reference"),
 			si.grand_total,
 			si.rounded_total,
