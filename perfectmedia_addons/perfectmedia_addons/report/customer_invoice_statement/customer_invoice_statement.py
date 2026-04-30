@@ -16,8 +16,6 @@ def execute(filters=None):
 
 	if not filters.get("company"):
 		frappe.throw(_("Please select Company"))
-	if not filters.get("customer"):
-		frappe.throw(_("Please select Customer"))
 	if not filters.get("from_date") or not filters.get("to_date"):
 		frappe.throw(_("From Date and To Date are required"))
 
@@ -245,7 +243,6 @@ def get_rows(filters, from_date, to_date):
 		)
 		.where(si.docstatus == 1)
 		.where(si.company == filters.company)
-		.where(si.customer == filters.customer)
 		.where(si.posting_date >= from_date)
 		.where(si.posting_date <= to_date)
 		.where(sii.parenttype == "Sales Invoice")
@@ -253,6 +250,9 @@ def get_rows(filters, from_date, to_date):
 		.orderby(si.name, order=Order.asc)
 		.orderby(sii.idx, order=Order.asc)
 	)
+
+	if filters.get("customer"):
+		query = query.where(si.customer == filters.customer)
 
 	query, params = query.walk()
 	match_conditions = build_match_conditions("Sales Invoice")
