@@ -24,8 +24,7 @@ frappe.query_reports["Customer Invoice Statement"] = {
 			fieldname: "customer",
 			label: __("Customer"),
 			fieldtype: "Link",
-			options: "Customer",
-			reqd: 1,
+			options: "Customer"
 		},
 		{
 			fieldname: "from_date",
