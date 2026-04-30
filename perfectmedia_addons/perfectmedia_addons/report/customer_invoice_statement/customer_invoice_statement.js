@@ -19,9 +19,7 @@ frappe.query_reports["Customer Invoice Statement"] = {
 			label: __("Company"),
 			fieldtype: "Link",
 			options: "Company",
-			default: frappe.defaults.get_user_default("Company"),
-			reqd: 1,
-		},
+			default: frappe.defaults.get_user_default("Company")		},
 		{
 			fieldname: "customer",
 			label: __("Customer"),
