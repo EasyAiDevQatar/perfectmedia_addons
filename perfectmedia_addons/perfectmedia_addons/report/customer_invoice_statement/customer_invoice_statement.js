@@ -51,7 +51,7 @@ frappe.query_reports["Customer Invoice Statement"] = {
 
 		const itemTotals = {};
 		for (const row of result) {
-			if (cint(row.is_invoice_subtotal)) {
+			if (cint(row.is_invoice_subtotal) || cint(row.is_opening_balance_row)) {
 				continue;
 			}
 			const key = row.item_name || row.item_code || __("Unknown");
@@ -100,6 +100,9 @@ frappe.query_reports["Customer Invoice Statement"] = {
 		const formatted = default_formatter(value, row, column, data);
 		if (!data) {
 			return formatted;
+		}
+		if (cint(data.is_opening_balance_row)) {
+			return `<span style="font-weight:700">${formatted}</span>`;
 		}
 		if (cint(data.is_invoice_subtotal)) {
 			return `<span style="font-weight:700">${formatted}</span>`;

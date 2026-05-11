@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/perfectmedia_addons/css/perfectmedia_addons.css"
-# app_include_js = "/assets/perfectmedia_addons/js/perfectmedia_addons.js"
+app_include_js = "/assets/perfectmedia_addons/js/pm_report_patches.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/perfectmedia_addons/css/perfectmedia_addons.css"

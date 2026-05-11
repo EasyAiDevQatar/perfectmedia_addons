@@ -4,8 +4,11 @@
 import frappe
 from frappe import _
 from frappe.desk.reportview import build_match_conditions
+from frappe.query_builder.functions import Sum
 from frappe.utils import flt, getdate
 from pypika import Order
+
+from erpnext.accounts.party import get_party_account
 
 
 def execute(filters=None):
@@ -22,24 +25,38 @@ def execute(filters=None):
 	from_date = getdate(filters.from_date)
 	to_date = getdate(filters.to_date)
 
+	opening_amount = None
+	company_currency = frappe.get_cached_value("Company", filters.company, "default_currency")
+	if filters.get("customer"):
+		opening_amount = get_customer_opening_balance(filters.company, filters.customer, from_date)
+
 	rows = get_rows(filters, from_date, to_date)
 	columns = get_columns()
 
 	if not rows:
+		if filters.get("customer") and opening_amount is not None:
+			open_row = _opening_balance_row(filters, opening_amount, company_currency)
+			rows = [open_row]
+			return columns, rows, None, None, build_report_summary(rows, filters.company, opening_amount, company_currency)
 		return columns, [], None, None, []
 
+	if opening_amount is not None:
+		rows.insert(0, _opening_balance_row(filters, opening_amount, company_currency))
+
 	rows = append_invoice_subtotal_rows(rows)
-	report_summary = build_report_summary(rows, filters.company)
+	report_summary = build_report_summary(
+		rows, filters.company, opening_amount, company_currency
+	)
 	return columns, rows, None, None, report_summary
 
 
-def build_report_summary(rows, company):
+def build_report_summary(rows, company, opening_amount=None, company_currency=None):
 	"""KPI cards shown above the datatable (colors via indicator)."""
 	seen_invoices = set()
 	total_invoiced = total_paid = total_outstanding = 0.0
 
 	for r in rows:
-		if r.get("is_invoice_subtotal"):
+		if r.get("is_invoice_subtotal") or r.get("is_opening_balance_row"):
 			continue
 		inv = r.get("invoice_reference")
 		if not inv or inv in seen_invoices:
@@ -53,9 +70,27 @@ def build_report_summary(rows, company):
 		"Company", company, "default_currency"
 	)
 	inv_count = len(seen_invoices)
-	line_count = sum(1 for r in rows if not r.get("is_invoice_subtotal"))
+	line_count = sum(
+		1
+		for r in rows
+		if not r.get("is_invoice_subtotal") and not r.get("is_opening_balance_row")
+	)
 
-	return [
+	summary = []
+	if opening_amount is not None and company_currency:
+		summary.append(
+			{
+				"label": _("Opening Balance (b/f)"),
+				"value": flt(opening_amount),
+				"datatype": "Currency",
+				"currency": company_currency,
+				"precision": 0,
+				"indicator": "Gray",
+			}
+		)
+
+	summary.extend(
+		[
 		{"label": _("Invoices"), "value": inv_count, "datatype": "Int", "indicator": "Blue"},
 		{
 			"label": _("Total Invoiced"),
@@ -83,13 +118,23 @@ def build_report_summary(rows, company):
 		},
 		{"type": "separator", "value": ""},
 		{"label": _("Line Items"), "value": line_count, "datatype": "Int", "indicator": "Gray"},
-	]
+		]
+	)
+	return summary
 
 
 def get_columns():
 	return [
 		{"label": _("Invoice Date"), "fieldname": "posting_date", "fieldtype": "Date", "width": 110},
 		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data", "width": 200},
+		{
+			"label": _("Opening Balance (b/f)"),
+			"fieldname": "opening_balance",
+			"fieldtype": "Currency",
+			"options": "currency",
+			"precision": 0,
+			"width": 130,
+		},
 		{
 			"label": _("Invoice Reference No"),
 			"fieldname": "invoice_reference",
@@ -156,6 +201,9 @@ def append_invoice_subtotal_rows(rows):
 	last_line = None
 
 	for row in rows:
+		if row.get("is_opening_balance_row"):
+			out.append(row)
+			continue
 		inv = row.get("invoice_reference")
 		if inv != current_inv:
 			if current_inv is not None and last_line is not None:
@@ -172,10 +220,37 @@ def append_invoice_subtotal_rows(rows):
 	return out
 
 
+def _opening_balance_row(filters, opening_amount, company_currency):
+	customer = filters.get("customer")
+	customer_name = (
+		frappe.get_cached_value("Customer", customer, "customer_name") if customer else None
+	)
+	return {
+		"posting_date": None,
+		"customer_name": customer_name,
+		"opening_balance": flt(opening_amount),
+		"invoice_reference": None,
+		"grand_total": None,
+		"paid_amount": None,
+		"outstanding_amount": None,
+		"due_date": None,
+		"item_code": None,
+		"item_name": _("Opening Balance (b/f)"),
+		"qty": None,
+		"uom": None,
+		"net_rate": None,
+		"net_amount": None,
+		"currency": company_currency,
+		"is_opening_balance_row": 1,
+		"bold": 1,
+	}
+
+
 def _invoice_subtotal_row(from_row, line_total):
 	return {
 		"posting_date": None,
 		"customer_name": None,
+		"opening_balance": None,
 		"invoice_reference": from_row.get("invoice_reference"),
 		"grand_total": None,
 		"paid_amount": None,
@@ -191,6 +266,31 @@ def _invoice_subtotal_row(from_row, line_total):
 		"is_invoice_subtotal": 1,
 		"bold": 1,
 	}
+
+
+def get_customer_opening_balance(company, customer, from_date):
+	"""AR opening in company currency: GL (debit - credit) before from_date on party receivable accounts."""
+	if not customer:
+		return None
+	accounts = get_party_account("Customer", customer, company, include_advance=True)
+	if not accounts:
+		return 0.0
+	if isinstance(accounts, str):
+		accounts = [accounts]
+	gle = frappe.qb.DocType("GL Entry")
+	row = (
+		frappe.qb.from_(gle)
+		.select(Sum(gle.debit - gle.credit).as_("balance"))
+		.where(
+			(gle.company == company)
+			& (gle.party_type == "Customer")
+			& (gle.party == customer)
+			& (gle.account.isin(accounts))
+			& (gle.posting_date < from_date)
+			& (gle.is_cancelled == 0)
+		)
+	).run(as_dict=True)
+	return flt(row[0].get("balance")) if row else 0.0
 
 
 def invoice_paid_amount(row):
