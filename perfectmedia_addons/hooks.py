@@ -5,6 +5,8 @@ app_description = "addons for perect media company"
 app_email = "joeyxjoey123@gmail.com"
 app_license = "mit"
 
+fixtures = ["report.json"]
+
 # Apps
 # ------------------
 

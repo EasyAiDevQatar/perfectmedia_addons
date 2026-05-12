@@ -7,7 +7,11 @@
 	}
 	frappe.__pm_report_patches = true;
 
-	const PM_LEDGER_REPORTS = ["Customer Ledger Summary", "General Ledger"];
+	/** ERPNext standard ledger reports: show currency as whole numbers (no decimals). */
+	const PM_LEDGER_INT_REPORTS = ["Customer Ledger Summary", "General Ledger"];
+	/** Perfectmedia copies: cap floating noise (e.g. 3.476387638 → 3.476). */
+	const PM_DECIMAL_REPORTS = ["PM General Ledger", "PM Accounts Receivable"];
+	const PM_DECIMAL_PLACES = 3;
 	const PM_CIS = "Customer Invoice Statement";
 
 	function pm_currency_precision_zero_formatter(report_settings) {
@@ -22,16 +26,43 @@
 		};
 	}
 
+	function pm_fixed_decimal_formatter(report_settings, places) {
+		const orig = report_settings.formatter;
+		report_settings.formatter = function (value, row, column, data, default_formatter) {
+			let col = column;
+			if (
+				column &&
+				(column.fieldtype === "Currency" ||
+					column.fieldtype === "Float" ||
+					column.fieldtype === "Percent")
+			) {
+				col = { ...column, precision: places };
+			}
+			if (orig) {
+				return orig.call(this, value, row, col, data, default_formatter);
+			}
+			return default_formatter(value, row, col, data);
+		};
+	}
+
 	const _get_report_settings = frappe.views.QueryReport.prototype.get_report_settings;
 	frappe.views.QueryReport.prototype.get_report_settings = function () {
 		return _get_report_settings.apply(this, arguments).then(() => {
 			if (
 				this.report_name &&
-				PM_LEDGER_REPORTS.includes(this.report_name) &&
-				!this.report_settings._pm_precision_patched
+				PM_LEDGER_INT_REPORTS.includes(this.report_name) &&
+				!this.report_settings._pm_precision_zero_patched
 			) {
-				this.report_settings._pm_precision_patched = 1;
+				this.report_settings._pm_precision_zero_patched = 1;
 				pm_currency_precision_zero_formatter(this.report_settings);
+			}
+			if (
+				this.report_name &&
+				PM_DECIMAL_REPORTS.includes(this.report_name) &&
+				!this.report_settings._pm_precision_decimal_patched
+			) {
+				this.report_settings._pm_precision_decimal_patched = 1;
+				pm_fixed_decimal_formatter(this.report_settings, PM_DECIMAL_PLACES);
 			}
 		});
 	};
