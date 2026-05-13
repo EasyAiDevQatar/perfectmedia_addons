@@ -13,6 +13,132 @@
 	const PM_DECIMAL_REPORTS = ["PM General Ledger", "PM Accounts Receivable"];
 	const PM_DECIMAL_PLACES = 3;
 	const PM_CIS = "Customer Invoice Statement";
+	const PM_PERFECTMEDIA_MODULE = "Perfectmedia Addons";
+
+	function pm_should_trim_print_for_report(query_report) {
+		if (!query_report || !query_report.report_name) {
+			return false;
+		}
+		if (
+			PM_DECIMAL_REPORTS.includes(query_report.report_name) ||
+			PM_LEDGER_INT_REPORTS.includes(query_report.report_name) ||
+			query_report.report_name === PM_CIS
+		) {
+			return true;
+		}
+		return (
+			query_report.report_doc && query_report.report_doc.module === PM_PERFECTMEDIA_MODULE
+		);
+	}
+
+	function pm_max_print_places(report_name, column) {
+		if (typeof column?.precision === "number") {
+			return column.precision;
+		}
+		if (PM_LEDGER_INT_REPORTS.includes(report_name)) {
+			return 0;
+		}
+		if (report_name === PM_CIS) {
+			return 2;
+		}
+		return PM_DECIMAL_PLACES;
+	}
+
+	function pm_compute_precision(value, maxPlaces) {
+		if (value === null || value === undefined || value === "") {
+			return 0;
+		}
+		const limit = Math.max(0, cint(maxPlaces));
+		const rounded = flt(flt(value), limit);
+		if (!limit) {
+			return 0;
+		}
+		const fixed = cstr(rounded);
+		if (!fixed.includes(".")) {
+			return 0;
+		}
+		const fraction = fixed.split(".")[1].replace(/0+$/, "");
+		return fraction.length;
+	}
+
+	function pm_format_currency_trim(value, currency, maxPlaces) {
+		if (value === null || value === undefined || value === "") {
+			return "";
+		}
+		const precision = pm_compute_precision(value, maxPlaces);
+		return format_currency(flt(value), currency, precision);
+	}
+
+	function pm_format_number_trim(value, maxPlaces) {
+		if (value === null || value === undefined || value === "") {
+			return "";
+		}
+		const precision = pm_compute_precision(value, maxPlaces);
+		return format_number(flt(value), null, precision);
+	}
+
+	function pm_print_numeric(value, column, data, maxPlaces, origFormat, row) {
+		if (value === null || value === undefined || value === "" || value === "<NA>") {
+			return origFormat ? origFormat(value, row, column, data) : "";
+		}
+		if (column.fieldtype === "Currency") {
+			const currency = frappe.meta.get_field_currency(column, data);
+			return pm_format_currency_trim(value, currency, maxPlaces);
+		}
+		if (column.fieldtype === "Float") {
+			return pm_format_number_trim(value, maxPlaces);
+		}
+		if (column.fieldtype === "Percent") {
+			return `${pm_format_number_trim(value, maxPlaces)}%`;
+		}
+		return origFormat ? origFormat(value, row, column, data) : value;
+	}
+
+	function pm_columns_for_trimmed_print(columns, query_report) {
+		return columns.map((column) => {
+			if (!column || !["Currency", "Float", "Percent"].includes(column.fieldtype)) {
+				return column;
+			}
+			const maxPlaces = pm_max_print_places(query_report.report_name, column);
+			const origFormat = column.format;
+			return Object.assign({}, column, {
+				format(value, row, column, data) {
+					return pm_print_numeric(
+						value,
+						column,
+						data,
+						maxPlaces,
+						origFormat,
+						row
+					);
+				},
+			});
+		});
+	}
+
+	async function pm_with_print_number_trim(query_report, fn) {
+		const defaultMax = pm_max_print_places(query_report.report_name, {});
+		const origFormatCurrency = window.format_currency;
+		const origFormatNumber = window.format_number;
+
+		window.format_currency = function (value, currency, precision) {
+			const maxPlaces =
+				precision === undefined || precision === null ? defaultMax : precision;
+			return pm_format_currency_trim(value, currency, maxPlaces);
+		};
+		window.format_number = function (value, docfield, precision) {
+			const maxPlaces =
+				precision === undefined || precision === null ? defaultMax : precision;
+			return pm_format_number_trim(value, maxPlaces);
+		};
+
+		try {
+			return await fn();
+		} finally {
+			window.format_currency = origFormatCurrency;
+			window.format_number = origFormatNumber;
+		}
+	}
 
 	function pm_currency_precision_zero_formatter(report_settings) {
 		const orig = report_settings.formatter;
@@ -89,36 +215,60 @@
 
 	const _get_columns_for_print = frappe.views.QueryReport.prototype.get_columns_for_print;
 	frappe.views.QueryReport.prototype.get_columns_for_print = function (print_settings, custom_format) {
+		let columns;
 		if (print_settings && print_settings._pm_picked_columns) {
 			const picked = print_settings._pm_picked_columns;
-			return this.get_visible_columns().filter((c) => picked.includes(c.fieldname));
+			columns = this.get_visible_columns().filter((c) => picked.includes(c.fieldname));
+		} else {
+			columns = _get_columns_for_print.call(this, print_settings, custom_format);
 		}
-		return _get_columns_for_print.call(this, print_settings, custom_format);
+		if (pm_should_trim_print_for_report(this)) {
+			columns = pm_columns_for_trimmed_print(columns, this);
+		}
+		return columns;
 	};
 
 	const _print_report = frappe.views.QueryReport.prototype.print_report;
 	frappe.views.QueryReport.prototype.print_report = async function (print_settings) {
+		const run = async () => {
+			if (pm_should_trim_print_for_report(this)) {
+				return await pm_with_print_number_trim(this, () =>
+					_print_report.call(this, print_settings)
+				);
+			}
+			return _print_report.call(this, print_settings);
+		};
+
 		if (this.report_name === PM_CIS) {
 			pm_stash_cis_pick_columns(print_settings);
 			try {
-				return await _print_report.call(this, print_settings);
+				return await run();
 			} finally {
 				pm_restore_cis_pick_columns(print_settings);
 			}
 		}
-		return _print_report.call(this, print_settings);
+		return await run();
 	};
 
 	const _pdf_report = frappe.views.QueryReport.prototype.pdf_report;
 	frappe.views.QueryReport.prototype.pdf_report = async function (print_settings) {
+		const run = async () => {
+			if (pm_should_trim_print_for_report(this)) {
+				return await pm_with_print_number_trim(this, () =>
+					_pdf_report.call(this, print_settings)
+				);
+			}
+			return _pdf_report.call(this, print_settings);
+		};
+
 		if (this.report_name === PM_CIS) {
 			pm_stash_cis_pick_columns(print_settings);
 			try {
-				return await _pdf_report.call(this, print_settings);
+				return await run();
 			} finally {
 				pm_restore_cis_pick_columns(print_settings);
 			}
 		}
-		return _pdf_report.call(this, print_settings);
+		return await run();
 	};
 })();
