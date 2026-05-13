@@ -31,7 +31,7 @@
 						<td style="padding: 8px 12px; white-space: nowrap">
 							<strong>{{ __(s.label) }}:</strong>
 							{% if s.datatype == "Currency" %}
-								{{ pm_format_report_currency(flt(s.value), s.currency || (data[0] && data[0].currency), (s.precision !== undefined && s.precision !== null) ? s.precision : 2) }}
+								{{ format_currency(flt(s.value), s.currency || (data[0] && data[0].currency), (s.precision !== undefined && s.precision !== null) ? s.precision : 2) }}
 							{% else %}
 								{{ s.value }}
 							{% endif %}

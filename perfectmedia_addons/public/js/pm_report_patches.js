@@ -166,6 +166,14 @@
 		return _frappe_render.call(this, str, data, name);
 	};
 
+	const _frappe_render_template = frappe.render_template;
+	frappe.render_template = function (name, data) {
+		if (frappe.__pm_print_trim_active) {
+			data = pm_inject_print_formatters(data);
+		}
+		return _frappe_render_template.call(this, name, data);
+	};
+
 	window.pm_format_report_currency = function (value, currency, maxPlaces) {
 		return pm_format_currency_trim(value, currency, maxPlaces);
 	};
