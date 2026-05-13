@@ -44,6 +44,16 @@
 		return PM_DECIMAL_PLACES;
 	}
 
+	function pm_strip_formatted_decimal_zeros(formatted) {
+		if (formatted === null || formatted === undefined || formatted === "") {
+			return formatted;
+		}
+		return String(formatted).replace(/(\d[\d,]*)\.(\d+)/g, (match, intPart, fraction) => {
+			const trimmed = fraction.replace(/0+$/, "");
+			return trimmed.length ? `${intPart}.${trimmed}` : intPart;
+		});
+	}
+
 	function pm_compute_precision(value, maxPlaces) {
 		if (value === null || value === undefined || value === "") {
 			return 0;
@@ -65,16 +75,26 @@
 		if (value === null || value === undefined || value === "") {
 			return "";
 		}
-		const precision = pm_compute_precision(value, maxPlaces);
-		return format_currency(flt(value), currency, precision);
+		const limit =
+			maxPlaces === undefined || maxPlaces === null
+				? PM_DECIMAL_PLACES
+				: Math.max(0, cint(maxPlaces));
+		const precision = pm_compute_precision(value, limit);
+		const formatted = format_currency(flt(value), currency, precision);
+		return pm_strip_formatted_decimal_zeros(formatted);
 	}
 
 	function pm_format_number_trim(value, maxPlaces) {
 		if (value === null || value === undefined || value === "") {
 			return "";
 		}
-		const precision = pm_compute_precision(value, maxPlaces);
-		return format_number(flt(value), null, precision);
+		const limit =
+			maxPlaces === undefined || maxPlaces === null
+				? PM_DECIMAL_PLACES
+				: Math.max(0, cint(maxPlaces));
+		const precision = pm_compute_precision(value, limit);
+		const formatted = format_number(flt(value), null, precision);
+		return pm_strip_formatted_decimal_zeros(formatted);
 	}
 
 	function pm_print_numeric(value, column, data, maxPlaces, origFormat, row) {
@@ -116,27 +136,49 @@
 		});
 	}
 
-	async function pm_with_print_number_trim(query_report, fn) {
-		const defaultMax = pm_max_print_places(query_report.report_name, {});
-		const origFormatCurrency = window.format_currency;
-		const origFormatNumber = window.format_number;
-
-		window.format_currency = function (value, currency, precision) {
+	function pm_inject_print_formatters(data) {
+		const report_name = frappe.__pm_print_trim_active;
+		if (!report_name) {
+			return data;
+		}
+		const defaultMax = pm_max_print_places(report_name, {});
+		const next = Object.assign({}, data || {});
+		next.format_currency = function (value, currency, precision) {
 			const maxPlaces =
 				precision === undefined || precision === null ? defaultMax : precision;
 			return pm_format_currency_trim(value, currency, maxPlaces);
 		};
-		window.format_number = function (value, docfield, precision) {
+		next.format_number = function (value, format, precision) {
 			const maxPlaces =
 				precision === undefined || precision === null ? defaultMax : precision;
 			return pm_format_number_trim(value, maxPlaces);
 		};
+		next.pm_format_report_currency = next.format_currency;
+		next.pm_format_report_number = next.format_number;
+		return next;
+	}
 
+	const _frappe_render = frappe.render;
+	frappe.render = function (str, data, name) {
+		if (frappe.__pm_print_trim_active) {
+			data = pm_inject_print_formatters(data);
+		}
+		return _frappe_render.call(this, str, data, name);
+	};
+
+	window.pm_format_report_currency = function (value, currency, maxPlaces) {
+		return pm_format_currency_trim(value, currency, maxPlaces);
+	};
+	window.pm_format_report_number = function (value, maxPlaces) {
+		return pm_format_number_trim(value, maxPlaces);
+	};
+
+	async function pm_with_print_number_trim(query_report, fn) {
+		frappe.__pm_print_trim_active = query_report.report_name;
 		try {
 			return await fn();
 		} finally {
-			window.format_currency = origFormatCurrency;
-			window.format_number = origFormatNumber;
+			frappe.__pm_print_trim_active = null;
 		}
 	}
 

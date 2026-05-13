@@ -33,7 +33,7 @@
 		</div>
 		<div class="pull-right">
 		{% if(filters.credit_limit) { %}
-			<strong>{%= __("Credit Limit") %}:</strong> {%= format_currency(filters.credit_limit) %}
+			<strong>{%= __("Credit Limit") %}:</strong> {%= pm_format_report_currency(filters.credit_limit) %}
 		{% } %}
 		</div>
 	</div>
@@ -81,22 +81,22 @@
 						{%= format_number(balance_row["age"], null, 2) %}
 					</td>
 					<td class="text-right">
-						{%= format_currency(balance_row["range1"], data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(balance_row["range1"], data[data.length-1]["currency"]) %}
 					</td>
 					<td class="text-right">
-						{%= format_currency(balance_row["range2"], data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(balance_row["range2"], data[data.length-1]["currency"]) %}
 					</td>
 					<td class="text-right">
-						{%= format_currency(balance_row["range3"], data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(balance_row["range3"], data[data.length-1]["currency"]) %}
 					</td>
 					<td class="text-right">
-						{%= format_currency(balance_row["range4"], data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(balance_row["range4"], data[data.length-1]["currency"]) %}
 					</td>
 					<td class="text-right">
-						{%= format_currency(balance_row["range5"], data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(balance_row["range5"], data[data.length-1]["currency"]) %}
 					</td>
 					<td class="text-right">
-						{%= format_currency(flt(balance_row["outstanding"]), data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(flt(balance_row["outstanding"]), data[data.length-1]["currency"]) %}
 					</td>
 				</tr>
 					<td>{%= __("Future Payments") %}</td>
@@ -107,7 +107,7 @@
 					<td></td>
 					<td></td>
 					<td class="text-right">
-						{%= format_currency(flt(balance_row[("future_amount")]), data[data.length-1]["currency"]) %}
+						{%= pm_format_report_currency(flt(balance_row[("future_amount")]), data[data.length-1]["currency"]) %}
 					</td>
 				<tr class="cvs-footer">
 					<th class="text-left">{%= __("Cheques Required") %}</th>
@@ -118,7 +118,7 @@
 					<th></th>
 					<th></th>
 					<th class="text-right">
-						{%= format_currency(flt(balance_row["outstanding"] - balance_row[("future_amount")]), data[data.length-1]["currency"]) %}</th>
+						{%= pm_format_report_currency(flt(balance_row["outstanding"] - balance_row[("future_amount")]), data[data.length-1]["currency"]) %}</th>
 				</tr>
 			</tbody>
 
@@ -209,16 +209,16 @@
 						{% } %}
 
 						<td style="text-align: right">
-							{%= format_currency(data[i]["invoiced"], data[i]["currency"]) %}</td>
+							{%= pm_format_report_currency(data[i]["invoiced"], data[i]["currency"]) %}</td>
 
 						{% if(!filters.show_future_payments) { %}
 							<td style="text-align: right">
-								{%= format_currency(data[i]["paid"], data[i]["currency"]) %}</td>
+								{%= pm_format_report_currency(data[i]["paid"], data[i]["currency"]) %}</td>
 							<td style="text-align: right">
-								{%= format_currency(data[i]["credit_note"], data[i]["currency"]) %}</td>
+								{%= pm_format_report_currency(data[i]["credit_note"], data[i]["currency"]) %}</td>
 						{% } %}
 						<td style="text-align: right">
-							{%= format_currency(data[i]["outstanding"], data[i]["currency"]) %}</td>
+							{%= pm_format_report_currency(data[i]["outstanding"], data[i]["currency"]) %}</td>
 
 						{% if(filters.show_future_payments) { %}
 							{% if((report.report_name === "Accounts Receivable" || report.report_name === "PM Accounts Receivable")) { %}
@@ -226,8 +226,8 @@
 									{%= data[i]["po_no"] %}</td>
 							{% } %}
 							<td style="text-align: right">{%= data[i]["future_ref"] %}</td>
-							<td style="text-align: right">{%= format_currency(data[i]["future_amount"], data[i]["currency"]) %}</td>
-							<td style="text-align: right">{%= format_currency(data[i]["remaining_balance"], data[i]["currency"]) %}</td>
+							<td style="text-align: right">{%= pm_format_report_currency(data[i]["future_amount"], data[i]["currency"]) %}</td>
+							<td style="text-align: right">{%= pm_format_report_currency(data[i]["remaining_balance"], data[i]["currency"]) %}</td>
 						{% } %}
 					{% } else { %}
 						<td></td>
@@ -240,15 +240,15 @@
 						<td></td>
 						<td style="text-align: right"><b>{%= __("Total") %}</b></td>
 						<td style="text-align: right">
-							{%= format_currency(data[i]["invoiced"], data[i]["currency"] ) %}</td>
+							{%= pm_format_report_currency(data[i]["invoiced"], data[i]["currency"] ) %}</td>
 
 						{% if(!filters.show_future_payments) { %}
 							<td style="text-align: right">
-								{%= format_currency(data[i]["paid"], data[i]["currency"]) %}</td>
-							<td style="text-align: right">{%= format_currency(data[i]["credit_note"], data[i]["currency"]) %} </td>
+								{%= pm_format_report_currency(data[i]["paid"], data[i]["currency"]) %}</td>
+							<td style="text-align: right">{%= pm_format_report_currency(data[i]["credit_note"], data[i]["currency"]) %} </td>
 						{% } %}
 						<td style="text-align: right">
-							{%= format_currency(data[i]["outstanding"], data[i]["currency"]) %}</td>
+							{%= pm_format_report_currency(data[i]["outstanding"], data[i]["currency"]) %}</td>
 
 						{% if(filters.show_future_payments) { %}
 							{% if((report.report_name === "Accounts Receivable" || report.report_name === "PM Accounts Receivable")) { %}
@@ -256,8 +256,8 @@
 									{%= data[i]["po_no"] %}</td>
 							{% } %}
 							<td style="text-align: right">{%= data[i]["future_ref"] %}</td>
-							<td style="text-align: right">{%= format_currency(data[i]["future_amount"], data[i]["currency"]) %}</td>
-							<td style="text-align: right">{%= format_currency(data[i]["remaining_balance"], data[i]["currency"]) %}</td>
+							<td style="text-align: right">{%= pm_format_report_currency(data[i]["future_amount"], data[i]["currency"]) %}</td>
+							<td style="text-align: right">{%= pm_format_report_currency(data[i]["remaining_balance"], data[i]["currency"]) %}</td>
 						{% } %}
 					{% } %}
 				{% } else { %}
@@ -278,10 +278,10 @@
 						{% } else { %}
 							<td><b>{%= __("Total") %}</b></td>
 						{% } %}
-						<td style="text-align: right">{%= format_currency(data[i]["invoiced"], data[i]["currency"]) %}</td>
-						<td style="text-align: right">{%= format_currency(data[i]["paid"], data[i]["currency"]) %}</td>
-						<td style="text-align: right">{%= format_currency(data[i]["credit_note"], data[i]["currency"]) %}</td>
-						<td style="text-align: right">{%= format_currency(data[i]["outstanding"], data[i]["currency"]) %}</td>
+						<td style="text-align: right">{%= pm_format_report_currency(data[i]["invoiced"], data[i]["currency"]) %}</td>
+						<td style="text-align: right">{%= pm_format_report_currency(data[i]["paid"], data[i]["currency"]) %}</td>
+						<td style="text-align: right">{%= pm_format_report_currency(data[i]["credit_note"], data[i]["currency"]) %}</td>
+						<td style="text-align: right">{%= pm_format_report_currency(data[i]["outstanding"], data[i]["currency"]) %}</td>
 					{% } %}
 				{% } %}
 				</tr>
