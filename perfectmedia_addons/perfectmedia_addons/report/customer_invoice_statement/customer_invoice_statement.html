@@ -1,49 +1,422 @@
 <style>
-	.pm-statement-logo {
-		left: 0;
-		position: fixed;
-		top: 16px;
-		z-index: 10;
+	@page {
+		margin: 10mm 6mm 8mm 6mm;
 	}
 
-	.pm-statement-logo img {
-		max-height: 70px;
-		width: auto;
+	.print-format {
+		margin: 0 !important;
+		max-width: none !important;
+		padding: 6mm 4mm 6mm !important;
+		width: 100% !important;
+		font-family: Arial, Helvetica, sans-serif;
+		font-size: 8.8pt;
+		color: #050505;
 	}
 
-	.pm-statement-print-content {
-		padding-top: 98px;
+	.print-format table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.pm-statement {
+		min-height: 255mm;
+		position: relative;
+		width: 100%;
+	}
+
+	.pm-header-table td {
+		border: 0 !important;
+		padding: 0 !important;
+		vertical-align: top !important;
+	}
+
+	.pm-logo img {
+		max-width: 72mm;
+		max-height: 43mm;
+	}
+
+	.pm-company {
+		text-align: right;
+		font-size: 9.2pt;
+		line-height: 1.22;
+		padding-top: 4mm !important;
+	}
+
+	.pm-company-name {
+		font-size: 20pt;
+		font-weight: 700;
+		line-height: 1.05;
+		margin-bottom: 2mm;
+	}
+
+	.pm-title-row {
+		margin-top: 16mm;
+	}
+
+	.pm-title-table td {
+		border: 0 !important;
+		padding: 0 !important;
+		vertical-align: top !important;
+	}
+
+	.pm-report-title {
+		font-size: 18pt;
+		font-weight: 700;
+		line-height: 1.05;
+	}
+
+	.pm-period {
+		font-size: 10.2pt;
+		font-weight: 700;
+		margin-top: 1mm;
+	}
+
+	.pm-to-block {
+		font-size: 10.5pt;
+		font-weight: 700;
+		line-height: 1.35;
+		text-align: left;
+		padding-left: 10mm !important;
+		text-transform: uppercase;
+	}
+
+	.pm-ledger {
+		margin-top: 21mm;
+		font-size: 8pt;
+	}
+
+	.pm-ledger th {
+		border: 0 !important;
+		border-bottom: 1.3pt solid #ee1c25 !important;
+		color: #111;
+		font-size: 7.5pt;
+		font-weight: 500;
+		padding: 0 2mm 2.8mm !important;
+		text-align: left;
+		text-transform: uppercase;
+	}
+
+	.pm-ledger td {
+		border: 0 !important;
+		font-size: 8.4pt;
+		font-weight: 700;
+		padding: 4mm 1.4mm 1.2mm !important;
+		vertical-align: top !important;
+	}
+
+	.pm-ledger .pm-num,
+	.pm-ledger .pm-opening {
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	.pm-ledger tr.pm-invoice-row td {
+		padding-top: 4mm !important;
+	}
+
+	.pm-ledger tr.pm-item-row td {
+		background: #f8f8f8;
+		padding: 0 1.4mm 2mm !important;
+	}
+
+	.pm-item-lines {
+		margin: 0;
+		width: 100% !important;
+	}
+
+	.pm-item-lines th {
+		border: 0 !important;
+		color: #555;
+		font-size: 7pt;
+		font-weight: 700;
+		padding: 1.1mm 1.2mm !important;
+		text-transform: uppercase;
+	}
+
+	.pm-item-lines td {
+		color: #333;
+		font-size: 7.4pt;
+		font-weight: 500;
+		padding: 0.7mm 1.2mm !important;
+	}
+
+	.pm-item-lines .pm-num {
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	.pm-empty-row td {
+		color: #555;
+		font-weight: 500;
+		text-align: center;
+	}
+
+	.pm-summary-wrap {
+		margin-left: auto;
+		margin-top: 14mm;
+		width: 86mm;
+	}
+
+	.pm-ledger + .pm-summary-wrap {
+		margin-top: 14mm;
+	}
+
+	.pm-summary {
+		font-size: 8.6pt;
+	}
+
+	.pm-summary th {
+		background: #fbd8dc;
+		border: 0 !important;
+		font-size: 8.6pt;
+		font-weight: 700;
+		padding: 3mm 2.5mm !important;
+		text-align: left;
+	}
+
+	.pm-summary td {
+		border: 0 !important;
+		font-weight: 700;
+		padding: 2.2mm 2.5mm !important;
+	}
+
+	.pm-summary td:last-child {
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	.pm-summary tr.pm-balance-row td {
+		border-top: 1pt solid #888 !important;
+		padding-top: 2.5mm !important;
+	}
+
+	.pm-print-footer {
+		color: #888;
+		font-size: 7.2pt;
+		margin-top: 8mm;
+		text-align: right;
 	}
 </style>
 
-<div class="pm-statement-logo">
-	<img src="/files/Perfect%20Media%20logo.png" alt="Perfect Media">
-</div>
+{% 
+	var rows = data || [];
+	var first_row = rows.length ? rows[0] : {};
+	var currency = first_row.currency || "QAR";
+	var opening_balance = 0;
+	var total_invoiced = 0;
+	var total_paid = 0;
+	var balance_due = 0;
+	var invoice_rows = [];
+	var seen = {};
 
-<div class="pm-statement-print-content">
-{% if report && report.raw_data && report.raw_data.report_summary %}
-<div class="report-summary-print" style="margin-bottom: 1em">
-	<table class="table table-condensed table-bordered" style="width: 100%">
-		<tbody>
+	function parseDate(value) {
+		if (!value) return null;
+		if (value instanceof Date) return value;
+		var parts = String(value).split("-");
+		if (parts.length === 3) {
+			return new Date(cint(parts[0]), cint(parts[1]) - 1, cint(parts[2]));
+		}
+		var parsed = new Date(value);
+		return isNaN(parsed.getTime()) ? null : parsed;
+	}
+
+	function formatStatementDate(value) {
+		var d = parseDate(value);
+		if (!d) return "";
+		return ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + "." + d.getFullYear();
+	}
+
+	function formatPeriodDate(value) {
+		return value ? frappe.datetime.str_to_user(value) : "";
+	}
+
+	function dateDiffDays(to_date, from_date) {
+		var to = parseDate(to_date);
+		var from = parseDate(from_date);
+		if (!to || !from) return "";
+		return Math.max(0, Math.round((to - from) / 86400000));
+	}
+
+	function money(value) {
+		return format_currency(flt(value), currency, 2);
+	}
+
+	for (var i = 0; i < rows.length; i++) {
+		var row = rows[i] || {};
+		if (cint(row.is_opening_balance_row)) {
+			opening_balance += flt(row.opening_balance);
+			if (row.currency) currency = row.currency;
+			continue;
+		}
+		if (cint(row.is_invoice_subtotal)) {
+			continue;
+		}
+		var invoice = row.invoice_reference || "";
+		if (!invoice) {
+			continue;
+		}
+		if (!seen[invoice]) {
+			seen[invoice] = {
+				posting_date: row.posting_date,
+				customer_name: row.customer_name,
+				invoice_reference: row.invoice_reference,
+				grand_total: row.grand_total,
+				paid_amount: row.paid_amount,
+				outstanding_amount: row.outstanding_amount,
+				due_date: row.due_date,
+				currency: row.currency,
+				items: [],
+			};
+			invoice_rows.push(seen[invoice]);
+			total_invoiced += flt(row.grand_total);
+			total_paid += flt(row.paid_amount);
+			balance_due += flt(row.outstanding_amount);
+		}
+		if (row.currency) currency = row.currency;
+		seen[invoice].items.push({
+			item_name: row.item_name || row.item_code || "",
+			qty: row.qty,
+			uom: row.uom,
+			net_rate: row.net_rate,
+			net_amount: row.net_amount,
+		});
+	}
+
+	balance_due += opening_balance;
+
+	var customer_name = filters.customer ? "" : __("All Customers");
+	if (filters.customer) {
+		for (var c = 0; c < rows.length; c++) {
+			if (rows[c] && rows[c].customer_name) {
+				customer_name = rows[c].customer_name;
+				break;
+			}
+		}
+		customer_name = customer_name || filters.customer;
+	}
+%}
+
+<div class="pm-statement">
+	<table class="pm-header-table">
+		<tr>
+			<td class="pm-logo" style="width: 52%;">
+				<img src="/files/Screenshot%202026-05-14%20125317.png" alt="Perfect Media">
+			</td>
+			<td class="pm-company" style="width: 48%;">
+				<div class="pm-company-name">Perfect Media</div>
+				<div>New Ind. Area Cross St.3 &amp; M</div>
+				<div>Doha - Qatar</div>
+				<div>aliperfect800@gmail.com</div>
+				<div>www.perfectmediaqa.com</div>
+			</td>
+		</tr>
+	</table>
+
+	<div class="pm-title-row">
+		<table class="pm-title-table">
 			<tr>
-				{% for s in report.raw_data.report_summary %}
-					{% if s.type != "separator" %}
-						<td style="padding: 8px 12px; white-space: nowrap">
-							<strong>{{ __(s.label) }}:</strong>
-							{% if s.datatype == "Currency" %}
-								{{ format_currency(flt(s.value), s.currency || (data[0] && data[0].currency), (s.precision !== undefined && s.precision !== null) ? s.precision : 2) }}
-							{% else %}
-								{{ s.value }}
-							{% endif %}
-						</td>
-					{% endif %}
-				{% endfor %}
+				<td style="width: 74%;">
+					<div class="pm-report-title">Statement of Accounts</div>
+					<div class="pm-period">
+						{%= formatPeriodDate(filters.from_date) %} To {%= formatPeriodDate(filters.to_date) %}
+					</div>
+				</td>
+				<td class="pm-to-block" style="width: 26%;">
+					<div>TO</div>
+					<div>{%= customer_name %}</div>
+				</td>
 			</tr>
+		</table>
+	</div>
+
+	<table class="pm-ledger">
+		<thead>
+			<tr>
+				<th style="width: 13%;">Date</th>
+				<th style="width: 15%; text-align: right;">Opening<br>Balance</th>
+				<th style="width: 20%;">Ref.No</th>
+				<th style="width: 17%; text-align: right;">Amount</th>
+				<th style="width: 17%; text-align: right;">Payments</th>
+				<th style="width: 18%; text-align: right;">Balance</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% if (invoice_rows.length) { %}
+				{% for (var r = 0; r < invoice_rows.length; r++) { %}
+					{% var inv = invoice_rows[r]; %}
+					<tr class="pm-invoice-row">
+						<td>{%= formatStatementDate(inv.posting_date) %}</td>
+						<td class="pm-opening">{%= r === 0 ? money(opening_balance) : "" %}</td>
+						<td>{%= inv.invoice_reference || "" %}</td>
+						<td class="pm-num">{%= money(inv.grand_total) %}</td>
+						<td class="pm-num">{%= money(inv.paid_amount) %}</td>
+						<td class="pm-num">{%= money(inv.outstanding_amount) %}</td>
+					</tr>
+					{% if (inv.items && inv.items.length) { %}
+						<tr class="pm-item-row">
+							<td colspan="6">
+								<table class="pm-item-lines">
+									<thead>
+										<tr>
+											<th style="width: 50%;">Item Name</th>
+											<th style="width: 14%; text-align: right;">Qty</th>
+											<th style="width: 16%; text-align: right;">Rate</th>
+											<th style="width: 20%; text-align: right;">Line Amount</th>
+										</tr>
+									</thead>
+									<tbody>
+										{% for (var lineIndex = 0; lineIndex < inv.items.length; lineIndex++) { %}
+											{% var item = inv.items[lineIndex]; %}
+											<tr>
+												<td>{%= item.item_name %}</td>
+												<td class="pm-num">{%= flt(item.qty) %}{%= item.uom ? " " + item.uom : "" %}</td>
+												<td class="pm-num">{%= money(item.net_rate) %}</td>
+												<td class="pm-num">{%= money(item.net_amount) %}</td>
+											</tr>
+										{% } %}
+									</tbody>
+								</table>
+							</td>
+						</tr>
+					{% } %}
+				{% } %}
+			{% } else { %}
+				<tr class="pm-empty-row">
+					<td colspan="6">{%= __("No invoice activity for the selected period") %}</td>
+				</tr>
+			{% } %}
 		</tbody>
 	</table>
-</div>
-<hr>
-{% endif %}
 
-{% include 'public/js/frappe/views/reports/print_grid.html' %}
+	<div class="pm-summary-wrap">
+		<table class="pm-summary">
+			<thead>
+				<tr>
+					<th colspan="2">Account Summary</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td>Opening Balance</td>
+					<td>{%= money(opening_balance) %}</td>
+				</tr>
+				<tr>
+					<td>Invoiced Amount</td>
+					<td>{%= money(total_invoiced) %}</td>
+				</tr>
+				<tr>
+					<td>Amount Received</td>
+					<td>{%= money(total_paid) %}</td>
+				</tr>
+				<tr class="pm-balance-row">
+					<td>Balance Due</td>
+					<td>{%= money(balance_due) %}</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+
+	<div class="pm-print-footer">
+		{%= __("Printed on {0}", [frappe.datetime.str_to_user(frappe.datetime.get_datetime_as_string())]) %}
+	</div>
 </div>
