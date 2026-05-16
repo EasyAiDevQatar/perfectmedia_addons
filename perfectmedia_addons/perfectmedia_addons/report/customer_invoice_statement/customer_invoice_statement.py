@@ -66,6 +66,7 @@ def build_report_summary(rows, company, opening_amount=None, company_currency=No
 		total_paid += flt(r.get("paid_amount"))
 		total_outstanding += flt(r.get("outstanding_amount"))
 
+	balance_due = total_outstanding + flt(opening_amount)
 	currency = rows[0].get("currency") or frappe.get_cached_value(
 		"Company", company, "default_currency"
 	)
@@ -109,12 +110,12 @@ def build_report_summary(rows, company, opening_amount=None, company_currency=No
 			"indicator": "Green",
 		},
 		{
-			"label": _("Outstanding"),
-			"value": total_outstanding,
+			"label": _("Balance Due"),
+			"value": balance_due,
 			"datatype": "Currency",
 			"currency": currency,
 			"precision": 2,
-			"indicator": "Orange" if total_outstanding > 0 else "Green",
+			"indicator": "Orange" if balance_due > 0 else "Green",
 		},
 		{"type": "separator", "value": ""},
 		{"label": _("Line Items"), "value": line_count, "datatype": "Int", "indicator": "Gray"},
