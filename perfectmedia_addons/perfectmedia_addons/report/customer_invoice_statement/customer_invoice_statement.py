@@ -8,9 +8,6 @@ from frappe.query_builder.functions import Sum
 from frappe.utils import flt, getdate
 from pypika import Order
 
-from erpnext.accounts.party import get_party_account
-
-
 def execute(filters=None):
 	if not filters:
 		filters = {}
@@ -283,14 +280,9 @@ def _invoice_subtotal_row(from_row, line_total):
 
 
 def get_customer_opening_balance(company, customer, from_date):
-	"""AR opening in company currency: GL (debit - credit) before from_date on party receivable accounts."""
+	"""Customer opening from GL party ledger, aligned with customer ledger behavior."""
 	if not customer:
 		return None
-	accounts = get_party_account("Customer", customer, company, include_advance=True)
-	if not accounts:
-		return 0.0
-	if isinstance(accounts, str):
-		accounts = [accounts]
 	gle = frappe.qb.DocType("GL Entry")
 	row = (
 		frappe.qb.from_(gle)
@@ -299,25 +291,14 @@ def get_customer_opening_balance(company, customer, from_date):
 			(gle.company == company)
 			& (gle.party_type == "Customer")
 			& (gle.party == customer)
-			& (gle.account.isin(accounts))
-			& (gle.posting_date < from_date)
+			& (
+				(gle.posting_date < from_date)
+				| ((gle.posting_date == from_date) & (gle.is_opening == "Yes"))
+			)
 			& (gle.is_cancelled == 0)
 		)
 	).run(as_dict=True)
 	return flt(row[0].get("balance")) if row else 0.0
-
-
-def get_receivable_accounts(company):
-	return frappe.get_all(
-		"Account",
-		filters={
-			"company": company,
-			"account_type": "Receivable",
-			"is_group": 0,
-			"disabled": 0,
-		},
-		pluck="name",
-	)
 
 
 def invoice_paid_amount(row):
@@ -415,10 +396,6 @@ def get_invoice_rows(filters, from_date, to_date):
 def get_non_invoice_payment_rows(filters, from_date, to_date):
 	"""Payments on customer AR that are not settled against Sales Invoices (e.g. Journal Entry settlements)."""
 	gle = frappe.qb.DocType("GL Entry")
-	receivable_accounts = get_receivable_accounts(filters.company)
-	if not receivable_accounts:
-		return []
-
 	query = (
 		frappe.qb.from_(gle)
 		.select(
@@ -437,7 +414,7 @@ def get_non_invoice_payment_rows(filters, from_date, to_date):
 		.where(gle.party.isnotnull())
 		.where(gle.posting_date >= from_date)
 		.where(gle.posting_date <= to_date)
-		.where(gle.account.isin(receivable_accounts))
+		.where(gle.voucher_type.isin(["Payment Entry", "Journal Entry"]))
 		.where((gle.credit - gle.debit) > 0)
 		.where((gle.against_voucher_type.isnull()) | (gle.against_voucher_type != "Sales Invoice"))
 		.groupby(
