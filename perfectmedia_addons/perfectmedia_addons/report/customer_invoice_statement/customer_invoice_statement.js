@@ -51,7 +51,11 @@ frappe.query_reports["Customer Invoice Statement"] = {
 
 		const itemTotals = {};
 		for (const row of result) {
-			if (cint(row.is_invoice_subtotal) || cint(row.is_opening_balance_row)) {
+			if (
+				cint(row.is_invoice_subtotal) ||
+				cint(row.is_opening_balance_row) ||
+				cint(row.is_non_invoice_payment)
+			) {
 				continue;
 			}
 			const key = row.item_name || row.item_code || __("Unknown");

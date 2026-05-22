@@ -205,8 +205,10 @@
 	var opening_balance = 0;
 	var total_invoiced = 0;
 	var total_paid = 0;
+	var total_non_invoice_paid = 0;
 	var balance_due = 0;
 	var invoice_rows = [];
+	var non_invoice_payments = [];
 	var seen = {};
 
 	function parseDate(value) {
@@ -251,6 +253,15 @@
 		if (cint(row.is_invoice_subtotal)) {
 			continue;
 		}
+		if (cint(row.is_non_invoice_payment)) {
+			total_non_invoice_paid += flt(row.paid_amount);
+			non_invoice_payments.push({
+				posting_date: row.posting_date,
+				label: row.item_name || row.voucher_no || __("Settlement Payment"),
+				paid_amount: row.paid_amount,
+			});
+			continue;
+		}
 		var invoice = row.invoice_reference || "";
 		if (!invoice) {
 			continue;
@@ -282,7 +293,8 @@
 		});
 	}
 
-	balance_due += opening_balance;
+	total_paid += total_non_invoice_paid;
+	balance_due += opening_balance - total_non_invoice_paid;
 
 	var customer_name = filters.customer ? "" : __("All Customers");
 	if (filters.customer) {
@@ -341,7 +353,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{% if (invoice_rows.length) { %}
+			{% if (invoice_rows.length || non_invoice_payments.length) { %}
 				{% for (var r = 0; r < invoice_rows.length; r++) { %}
 					{% var inv = invoice_rows[r]; %}
 					<tr class="pm-invoice-row">
@@ -379,6 +391,17 @@
 							</td>
 						</tr>
 					{% } %}
+				{% } %}
+				{% for (var p = 0; p < non_invoice_payments.length; p++) { %}
+					{% var payment = non_invoice_payments[p]; %}
+					<tr class="pm-invoice-row">
+						<td>{%= formatStatementDate(payment.posting_date) %}</td>
+						<td class="pm-opening">{%= (!invoice_rows.length && p === 0) ? money(opening_balance) : "" %}</td>
+						<td>{%= payment.label %}</td>
+						<td class="pm-num"></td>
+						<td class="pm-num">{%= money(payment.paid_amount) %}</td>
+						<td class="pm-num"></td>
+					</tr>
 				{% } %}
 			{% } else { %}
 				<tr class="pm-empty-row">

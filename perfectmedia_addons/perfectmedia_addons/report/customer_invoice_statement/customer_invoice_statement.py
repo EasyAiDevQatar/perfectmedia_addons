@@ -54,9 +54,13 @@ def build_report_summary(rows, company, opening_amount=None, company_currency=No
 	"""KPI cards shown above the datatable (colors via indicator)."""
 	seen_invoices = set()
 	total_invoiced = total_paid = total_outstanding = 0.0
+	total_non_invoice_paid = 0.0
 
 	for r in rows:
 		if r.get("is_invoice_subtotal") or r.get("is_opening_balance_row"):
+			continue
+		if r.get("is_non_invoice_payment"):
+			total_non_invoice_paid += flt(r.get("paid_amount"))
 			continue
 		inv = r.get("invoice_reference")
 		if not inv or inv in seen_invoices:
@@ -66,7 +70,8 @@ def build_report_summary(rows, company, opening_amount=None, company_currency=No
 		total_paid += flt(r.get("paid_amount"))
 		total_outstanding += flt(r.get("outstanding_amount"))
 
-	balance_due = total_outstanding + flt(opening_amount)
+	total_paid += total_non_invoice_paid
+	balance_due = total_outstanding + flt(opening_amount) - total_non_invoice_paid
 	currency = rows[0].get("currency") or frappe.get_cached_value(
 		"Company", company, "default_currency"
 	)
@@ -205,6 +210,14 @@ def append_invoice_subtotal_rows(rows):
 		if row.get("is_opening_balance_row"):
 			out.append(row)
 			continue
+		if row.get("is_non_invoice_payment"):
+			if current_inv is not None and last_line is not None:
+				out.append(_invoice_subtotal_row(last_line, group_sum))
+				current_inv = None
+				group_sum = 0.0
+				last_line = None
+			out.append(row)
+			continue
 		inv = row.get("invoice_reference")
 		if inv != current_inv:
 			if current_inv is not None and last_line is not None:
@@ -294,6 +307,19 @@ def get_customer_opening_balance(company, customer, from_date):
 	return flt(row[0].get("balance")) if row else 0.0
 
 
+def get_receivable_accounts(company):
+	return frappe.get_all(
+		"Account",
+		filters={
+			"company": company,
+			"account_type": "Receivable",
+			"is_group": 0,
+			"disabled": 0,
+		},
+		pluck="name",
+	)
+
+
 def invoice_paid_amount(row):
 	"""Settled amount against the invoice.
 
@@ -316,6 +342,12 @@ def invoice_paid_amount(row):
 
 
 def get_rows(filters, from_date, to_date):
+	invoice_rows = get_invoice_rows(filters, from_date, to_date)
+	non_invoice_payment_rows = get_non_invoice_payment_rows(filters, from_date, to_date)
+	return invoice_rows + non_invoice_payment_rows
+
+
+def get_invoice_rows(filters, from_date, to_date):
 	si = frappe.qb.DocType("Sales Invoice")
 	sii = frappe.qb.DocType("Sales Invoice Item")
 
@@ -378,3 +410,104 @@ def get_rows(filters, from_date, to_date):
 		for k in _internal:
 			row.pop(k, None)
 	return rows
+
+
+def get_non_invoice_payment_rows(filters, from_date, to_date):
+	"""Payments on customer AR that are not settled against Sales Invoices (e.g. Journal Entry settlements)."""
+	gle = frappe.qb.DocType("GL Entry")
+	receivable_accounts = get_receivable_accounts(filters.company)
+	if not receivable_accounts:
+		return []
+
+	query = (
+		frappe.qb.from_(gle)
+		.select(
+			gle.posting_date,
+			gle.party.as_("customer"),
+			gle.voucher_type,
+			gle.voucher_no,
+			gle.against_voucher_type,
+			gle.against_voucher,
+			Sum(gle.credit - gle.debit).as_("paid_amount"),
+		)
+		.where(gle.docstatus == 1)
+		.where(gle.is_cancelled == 0)
+		.where(gle.company == filters.company)
+		.where(gle.party_type == "Customer")
+		.where(gle.party.isnotnull())
+		.where(gle.posting_date >= from_date)
+		.where(gle.posting_date <= to_date)
+		.where(gle.account.isin(receivable_accounts))
+		.where((gle.credit - gle.debit) > 0)
+		.where((gle.against_voucher_type.isnull()) | (gle.against_voucher_type != "Sales Invoice"))
+		.groupby(
+			gle.posting_date,
+			gle.party,
+			gle.voucher_type,
+			gle.voucher_no,
+			gle.against_voucher_type,
+			gle.against_voucher,
+		)
+		.orderby(gle.posting_date, order=Order.asc)
+		.orderby(gle.voucher_no, order=Order.asc)
+	)
+
+	if filters.get("customer"):
+		query = query.where(gle.party == filters.customer)
+
+	query, params = query.walk()
+	match_conditions = build_match_conditions("GL Entry")
+	if match_conditions:
+		query += " and " + match_conditions
+
+	rows = frappe.db.sql(query, params, as_dict=True)
+	if not rows:
+		return []
+
+	customers = {d.get("customer") for d in rows if d.get("customer")}
+	customer_name_map = {}
+	if customers:
+		customer_name_map = {
+			d.name: d.customer_name
+			for d in frappe.get_all(
+				"Customer",
+				filters={"name": ["in", list(customers)]},
+				fields=["name", "customer_name"],
+			)
+		}
+
+	out = []
+	for row in rows:
+		paid_amount = flt(row.get("paid_amount"))
+		if paid_amount <= 0:
+			continue
+		reference_text = row.get("against_voucher") or row.get("voucher_no")
+		item_label = _("Settlement payment")
+		if row.get("against_voucher_type") == "Journal Entry":
+			item_label = _("Settlement against Journal Entry")
+		if reference_text:
+			item_label = _("{0} ({1})").format(item_label, reference_text)
+
+		out.append(
+			{
+				"posting_date": row.get("posting_date"),
+				"customer_name": customer_name_map.get(row.get("customer")) or row.get("customer"),
+				"opening_balance": None,
+				"invoice_reference": None,
+				"grand_total": None,
+				"paid_amount": paid_amount,
+				"outstanding_amount": None,
+				"due_date": None,
+				"item_code": None,
+				"item_name": item_label,
+				"qty": None,
+				"uom": None,
+				"net_rate": None,
+				"net_amount": None,
+				"currency": frappe.get_cached_value("Company", filters.company, "default_currency"),
+				"is_non_invoice_payment": 1,
+				"bold": 1,
+			}
+		)
+
+	return out
