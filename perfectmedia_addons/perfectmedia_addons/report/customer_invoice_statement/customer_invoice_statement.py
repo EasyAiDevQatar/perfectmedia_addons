@@ -393,6 +393,57 @@ def get_invoice_rows(filters, from_date, to_date):
 	return rows
 
 
+def get_sales_invoice_allocated_amounts(gl_rows):
+	"""Amount of each payment voucher that is allocated to Sales Invoices.
+
+	These allocations already reduce the invoice's outstanding (and thus appear in the
+	invoice's paid_amount), so they must not be re-counted as standalone settlement rows.
+	"""
+	payment_entries = {
+		r.get("voucher_no")
+		for r in gl_rows
+		if r.get("voucher_type") == "Payment Entry" and r.get("voucher_no")
+	}
+	journal_entries = {
+		r.get("voucher_no")
+		for r in gl_rows
+		if r.get("voucher_type") == "Journal Entry" and r.get("voucher_no")
+	}
+
+	allocated = {}
+
+	if payment_entries:
+		per = frappe.qb.DocType("Payment Entry Reference")
+		pe_rows = (
+			frappe.qb.from_(per)
+			.select(per.parent, Sum(per.allocated_amount).as_("amount"))
+			.where(per.parent.isin(list(payment_entries)))
+			.where(per.reference_doctype == "Sales Invoice")
+			.where(per.docstatus == 1)
+			.groupby(per.parent)
+		).run(as_dict=True)
+		for d in pe_rows:
+			allocated[d.get("parent")] = flt(d.get("amount"))
+
+	if journal_entries:
+		jea = frappe.qb.DocType("Journal Entry Account")
+		je_rows = (
+			frappe.qb.from_(jea)
+			.select(
+				jea.parent,
+				Sum(jea.credit_in_account_currency - jea.debit_in_account_currency).as_("amount"),
+			)
+			.where(jea.parent.isin(list(journal_entries)))
+			.where(jea.reference_type == "Sales Invoice")
+			.where(jea.docstatus == 1)
+			.groupby(jea.parent)
+		).run(as_dict=True)
+		for d in je_rows:
+			allocated[d.get("parent")] = flt(allocated.get(d.get("parent"))) + flt(d.get("amount"))
+
+	return allocated
+
+
 def get_non_invoice_payment_rows(filters, from_date, to_date):
 	"""Payments on customer AR that are not settled against Sales Invoices (e.g. Journal Entry settlements)."""
 	gle = frappe.qb.DocType("GL Entry")
@@ -441,6 +492,13 @@ def get_non_invoice_payment_rows(filters, from_date, to_date):
 	if not rows:
 		return []
 
+	# Payments allocated to a Sales Invoice are already reflected in that invoice's
+	# paid_amount/outstanding. When advance payments are booked in a separate party
+	# account, the settling GL entry carries against_voucher_type = "Payment Entry"
+	# (not "Sales Invoice"), so the WHERE filter above cannot exclude it. Subtract the
+	# Sales-Invoice-allocated portion here to avoid counting those payments twice.
+	si_allocated = get_sales_invoice_allocated_amounts(rows)
+
 	customers = {d.get("customer") for d in rows if d.get("customer")}
 	customer_name_map = {}
 	if customers:
@@ -458,6 +516,18 @@ def get_non_invoice_payment_rows(filters, from_date, to_date):
 		paid_amount = flt(row.get("paid_amount"))
 		if paid_amount <= 0:
 			continue
+
+		# Remove the portion already settled against Sales Invoices (counted on the
+		# invoice rows). Consume the allocation across each voucher's grouped rows.
+		voucher_no = row.get("voucher_no")
+		allocated = flt(si_allocated.get(voucher_no))
+		if allocated > 0:
+			consumed = min(allocated, paid_amount)
+			paid_amount -= consumed
+			si_allocated[voucher_no] = allocated - consumed
+			if paid_amount <= 0.005:
+				continue
+
 		reference_text = row.get("against_voucher") or row.get("voucher_no")
 		item_label = _("Settlement payment")
 		if row.get("against_voucher_type") == "Journal Entry":
